@@ -82,3 +82,6 @@ submission.zip
    └── ai/
        └── <all AI interactions (chat logs, etc.)>
 ```
+
+## Previous Competitions:
+We've run versions of this competition for the past several years at [NYU's CSAW Event](https://www.csaw.io/ai-hardware-attack-challenge). We also [published results from the first two competitions](https://ieeexplore.ieee.org/document/11169309), which might help serve as inspiration if you find your team is stuck.
