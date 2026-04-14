@@ -10,8 +10,8 @@ read_verilog ./synth_output/cv32e40p_synth_sky130.v
 # Link top module
 link_design cv32e40p_top
 
-# Define timing constraints for a 100ns (10MHz) clock
-create_clock -name core_clock -period 100.0 [get_ports clk_i]
+# Define timing constraints for a 25ns (40MHz) clock
+create_clock -name core_clock -period 25.0 [get_ports clk_i]
 
 # Set ideal networks for global signals
 set_ideal_network [get_ports clk_i]
