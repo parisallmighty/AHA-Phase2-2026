@@ -54,6 +54,8 @@ All files should be submitted in the following format to [this Google form](http
 ```
 submission.zip
 ├── README.md
+├─ golden_metrics
+│  └── This is the metrics folder generated from running the run_ppa.sh script on the unmodified design
 ├─ Trojan_1
 │  ├── rtl/
 │  │   └── <modified RTL>

@@ -1,5 +1,5 @@
 # Read the flattened design from sv2v
-read_verilog ./synth_output/cv32e40p_flattened.v
+read_verilog ./synth_outputs/cv32e40p_flattened.v
 
 # Read the skywater130 liberty file
 read_liberty -lib ./sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -24,4 +24,4 @@ tee -o ./metrics/timing_report.txt ltp
 tee -o ./metrics/area_report.txt stat -liberty ./sky130_fd_sc_hd__tt_025C_1v80.lib
 
 # Write out the final synthesized netlist for OpenSTA
-write_verilog ./synth_output/cv32e40p_synth_sky130.v
+write_verilog ./synth_outputs/cv32e40p_synth_sky130.v

@@ -7,7 +7,7 @@ echo "Starting automated PPA analysis for CV32E40P..."
 
 # Create output directories
 mkdir -p ./metrics
-mkdir -p ./synth_output
+mkdir -p ./synth_outputs
 
 # sv2v to flatten the SystemVerilog into Verilog-2001
 
@@ -42,7 +42,7 @@ sv2v \
 	../rtl/cv32e40p_core.sv \
 	./cv32e40p_clock_gate.sv \
 	../rtl/cv32e40p_top.sv \
-    > ./synth_output/cv32e40p_flattened.v
+    > ./synth_outputs/cv32e40p_flattened.v
 
 # Yosys for synthesis to skywater130
 echo "Running Yosys Synthesis (SkyWater 130nm)..."
