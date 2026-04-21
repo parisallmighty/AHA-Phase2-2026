@@ -1,0 +1,43 @@
+[19:47:11] pipeline run_id=rfresh_20260420_194711 submit=False stock_tb=False
+[19:47:11] run_dir=<submission>/Pipeline/runs/rfresh_20260420_194711
+[19:47:11] smoke tb_file=<run>/tb_smoke.v
+[19:47:11] golden baseline: cells=39152  area=404314.0 um^2  arrival=78.1444ns
+[19:47:11] LLM backends: gen=claude(claude-opus-4-7)  critic=claude(claude-haiku-4-5-20251001)  verifier=claude(claude-sonnet-4-6)
+[19:47:11] Stage 0: AI planner (Opus 4.7) — vague brief + research KB...
+[19:55:04]   planner OK on attempt 1
+[19:55:04]     T1: HT2 cell=['seq_counter', 'info_leak', 'rx_path'] target=['eth_rxaddrcheck.v'] CVSS=7.5 (High)
+[19:55:04]     T2: HT3 cell=['time_bomb', 'silent_dos', 'tx_path'] target=['eth_txcounters.v'] CVSS=7.5 (High)
+[19:55:04]     T3: HT1 cell=['fsm_coincidence', 'integrity_tamper', 'fsm'] target=['eth_macstatus.v'] CVSS=7.4 (High)
+[19:55:04]   plan T1: class=HT2 cell=['seq_counter', 'info_leak', 'rx_path'] target=['eth_rxaddrcheck.v'] CVSS=7.5 (High)
+[19:55:04]   plan T2: class=HT3 cell=['time_bomb', 'silent_dos', 'tx_path'] target=['eth_txcounters.v'] CVSS=7.5 (High)
+[19:55:04]   plan T3: class=HT1 cell=['fsm_coincidence', 'integrity_tamper', 'fsm'] target=['eth_macstatus.v'] CVSS=7.4 (High)
+[19:55:04] Stage 1: agent 0 -> T1 HT2
+[19:55:04]   agent 0 round 0 / 1
+[19:57:06]     gate: tb=True area=+0.0030 timing=-0.0041 power=+0.0029 synth-survived=True
+[19:57:43]     round 0 done -> verdict=refine fitness=19.17
+[19:57:43]   agent 0 round 1 / 1
+[20:04:10]     fast_check FAIL: smoke_tb_failed
+[20:04:10]   agent 0 -> fitness=19.17 cell=('seq_counter', 'info_leak', 'rx_path')
+[20:04:10] Stage 1: agent 1 -> T2 HT3
+[20:04:10]   agent 1 round 0 / 1
+[20:05:28]     gate: tb=True area=+0.0024 timing=-0.0080 power=+0.0026 synth-survived=True
+[20:05:51]     round 0 done -> verdict=refine fitness=21.17
+[20:05:51]   agent 1 round 1 / 1
+[20:06:33]     model refused: no verilog fence found: ```diff
+diff --git a/rtl/verilog/eth_txcounters.v b/rtl/verilog/eth_txcounters.v
+index 4edecfa..5a8b2e0 100644
+--- a/rtl/verilog/eth_txcounters.v
++++ b/rtl/verilog/eth_txcounters.v
+@@ -137,8 +137,15 @
+[20:06:33]   agent 1 -> fitness=21.17 cell=('time_bomb', 'silent_dos', 'tx_path')
+[20:06:33] Stage 1: agent 2 -> T3 HT1
+[20:06:33]   agent 2 round 0 / 1
+[20:08:34]     gate: tb=True area=+0.0003 timing=+0.0017 power=+0.0001 synth-survived=True
+[20:09:00]     round 0 done -> verdict=accept fitness=19.53
+[20:09:00]   agent 2 -> fitness=19.53 cell=('fsm_coincidence', 'integrity_tamper', 'fsm')
+[20:09:00] Stage 2: MAP-Elites archive top-3 (cells=3)
+[20:09:00]   elite fitness=21.17 cell=('time_bomb', 'silent_dos', 'tx_path') target=['eth_txcounters.v']
+[20:09:00]   elite fitness=19.53 cell=('fsm_coincidence', 'integrity_tamper', 'fsm') target=['eth_macstatus.v']
+[20:09:00]   elite fitness=19.17 cell=('seq_counter', 'info_leak', 'rx_path') target=['eth_rxaddrcheck.v']
+[20:09:00] Stage 3: independent verifier (claude)...
+[20:10:28] Stage 4: packaging submission...

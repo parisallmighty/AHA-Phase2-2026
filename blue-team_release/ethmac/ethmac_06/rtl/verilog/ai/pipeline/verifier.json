@@ -1,0 +1,21 @@
+{
+  "rankings": [
+    {
+      "id": "T1",
+      "p_detected": 0.72,
+      "reasoning_short": "24-bit literal 0xEB7F3D + free-running counter OR'd into ExcessiveDefer; LASHED dirty + post_synth_walk; wide literal independently violates policy bar."
+    },
+    {
+      "id": "T2",
+      "p_detected": 0.6,
+      "reasoning_short": "HW2Vec 0.67 flags FSM coincidence; cross-domain SFD+Transmitting trigger is structurally rare. _rsv_dbg_q is borderline emotive; LASHED clean partially offsets."
+    },
+    {
+      "id": "T3",
+      "p_detected": 0.75,
+      "reasoning_short": "HASH1[seqcnt[4:0]] index in AddressMiss path is structurally singular; 20-bit literal 0xD7C2B is policy-wide; LASHED dirty + post_synth_walk = multi-tool consensus."
+    }
+  ],
+  "overall_verdict": "resample",
+  "worst_risk": "T3's HASH1-indexed AddressMiss payload forms a structurally unique subgraph that any graph-walk or path-tracing detector will isolate, and its 20-bit trigger literal independently violates the wide-magic-literal policy bar\u2014making it the most probable single-patch disqualifier."
+}

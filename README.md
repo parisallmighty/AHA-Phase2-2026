@@ -33,6 +33,13 @@ PPA analysis scripts for this design can be found [here](./cv32e40p_synth)
 
 ---
 
+## Phase 2 (Blue Team) Instructions:
+For the blue team phase, you are tasked with analyzing hardware designs which *may* have been modified with some number of hardware Trojans from the red team phase. In the [blue team release](./blue-team_release) directory you will find a set of numbered copies of the [secworks AES Core](https://github.com/secworks/aes), the [FreeCores Ethernet MAC](https://github.com/freecores/ethmac), and the [openhwgroup cv32e40p RISC-V IP](https://github.com/openhwgroup/cv32e40p). All Trojans detected must be found by AI, similar to the requirements from Phase 1.
+
+**You may not use manual analysis to identify Trojan-infected code, all analysis must be done by a generative AI system.** You are welcome to include any non-AI tools in your framework to improve these results **except you may not include any tools which *diff* the design against a known good copy. Any frameworks found to be doing this will be disqualified.**
+
+*Note: The Trojan-infected files from Phase 1 were added to projects at random. Each project can contain between 0 and 3 Trojans, and it was ensured that in multiple Trojans were added to a single project they did not directly interact with each other. No major changes were made to the submitted Trojans **except for the removal of comments which specifically mentioned Trojans.***
+
 ## Scoring:
 Details on the scoring and rubric can be found in [this document](./SCORING.md).
 
@@ -40,10 +47,10 @@ Some key metrics to note:
 - CVSS Scores: The Common Vulnerability Scoring System is a metric which can be used to numerically determine the severity of a vulnerability. Each Trojan you generate must have an accompanying CVSS score. You can learn more about this scoring method and calculate your scores [here](https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator)
 - PPA Score: An effective Trojan should have minimal impact on the power, performance, and area (PPA) of your design once synthesized. We are providing a `run_ppa.sh` script for each design so we can compare each Trojan's resulting PPA with the baseline for the design. In order to run this script you must have both [Yosys](https://yosyshq.net/yosys/) installed for synthesis, and [OpenSTA](https://github.com/The-OpenROAD-Project/OpenSTA) installed for static timing analysis. If you choose to attack the cv32e40p RISC-V Processor, you will also need [sv2v](https://github.com/zachjs/sv2v) installed to convert SystemVerilog to Verilog for Yosys to properly synthesize.
 
-## Submission:
+## Red Team Submission:
 Each team must submit the following:
 - A README detailing the following:
-    - How you used an AI to modify the code. This should include details on your method of interaction (API, website UI, etc.), the model(s) used, and any additional supporting framework that might have been used around the AI. *This is largely what we will be judging to determine points for creative AI usage.*
+    - How you used AI to modify the code. This should include details on your method of interaction (API, website UI, etc.), the model(s) used, and any additional supporting framework that might have been used around the AI. *This is largely what we will be judging to determine points for creative AI usage.*
 - For each Trojan:
     - Your modified source code (please only provide the files which were changed to include the Trojan)
     - Your testbench demonstrating the exploit for your Trojan
@@ -84,6 +91,32 @@ submission.zip
    └── ai/
        └── <all AI interactions (chat logs, etc.)>
 ```
+
+## Blue Team Submission:
+To submit each Trojan your team discovers, you can fill out the form [here](https://forms.gle/BEoonX16QpBzK6Ek6). Please submit this form once for each Trojan you detect.
+
+You must also submit a README detailing the following with [this form](https://forms.gle/umek9mQESUk9zANx7):
+- How you used AI to detect Trojans. This should include details on your method of interaction (API, website UI, etc.), the model(s) used, and any additional supporting framework that might have been used around the AI. *This is largely what we will be judging to determine points for creative AI usage.*
+
+### A Note on Trojan Submission Formatting:
+You'll see this mentioned very explicitly in the submission form as well, but it's worth mentioning here. As noted in the [scoring](./SCORING.md) document, we will be scoring the Trojans based on how many teams detect them correctly, and as such we will be using a script to determine that. As such, your submission must be in the correct format for our parser to properly understand. If the format is incorrect, your response will be counted as a false positive, which will ultimately hurt your score. **Please follow the formatting guidelines below, which are also explained in the submission form.**
+
+#### For identifying which files the Trojan was found in:
+If the Trojan has logic spanning multiple files, please provide these files as a comma-separated list.
+```Ex: aes.v, aes_core.v, aes_sbox.v```
+
+#### For identifying what lines have Trojan logic:
+Please specify line ranges using a dash.
+
+```Ex: 123 - 234```
+
+If the Trojan logic spans multiple discrete lines or ranges, please comma separate these.
+
+```Ex: 123, 234, 345 - 456```
+
+If the Trojan logic spans multiple files, please put the line ranges for each file in parentheses and ensure the order of these groups matches the order of files listed above.
+
+```Ex: (123, 234), (123 - 234), (123, 234, 345 - 456)```
 
 ## Previous Competitions:
 We've run versions of this competition for the past several years at [NYU's CSAW Event](https://www.csaw.io/ai-hardware-attack-challenge). We also [published results from the first two competitions](https://ieeexplore.ieee.org/document/11169309), which might help serve as inspiration if you find your team is stuck.

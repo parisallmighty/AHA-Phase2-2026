@@ -1,0 +1,4 @@
+VCD info: dumpfile tb_exploit.vcd opened for output.
+INFO: pre-force phase, ExcessiveDefer=0 matches golden=0
+>>> EXPLOIT_SUCCESS : _rsv_sec_q latched high permanently asserts ExcessiveDefer, causing silent TX DoS
+<run>/submission/Trojan_1/tb/tb_exploit.v:222: $finish called at 2301000 (1ps)

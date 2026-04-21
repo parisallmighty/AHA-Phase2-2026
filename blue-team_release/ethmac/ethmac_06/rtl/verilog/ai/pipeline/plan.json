@@ -1,0 +1,56 @@
+[
+  {
+    "id": "T1",
+    "class": "HT2",
+    "cell": [
+      "seq_counter",
+      "info_leak",
+      "rx_path"
+    ],
+    "target_files": [
+      "eth_rxaddrcheck.v"
+    ],
+    "concept": "A 20-bit sequential counter (_rsv_seqcnt) advances once per received non-broadcast, non-promiscuous unicast frame at byte position 7 (StateData==2'b10 && ByteCntEq7 && !Broadcast && !r_Pro); when it crosses threshold 20'hD7C2B the sticky latch _rsv_obs_q arms permanently, after which the registered AddressMiss output is ORed with HASH1[_rsv_seqcnt[4:0]], encoding successive bits of the 32-bit multicast hash-filter register in the observable frame-acceptance channel a remote attacker can probe.",
+    "neutral_spec": "In eth_rxaddrcheck.v, within the existing always @(posedge MRxClk or posedge Reset) block, declare and drive two new registers: (1) (* keep = \"true\" *) reg [19:0] _rsv_seqcnt \u2014 on Reset assign 20'h0; else when (StateData == 2'b10) && ByteCntEq7 && !Broadcast && !r_Pro, assign _rsv_seqcnt + 20'h1 with natural 20-bit wrap-around and no ceiling; (2) (* keep = \"true\" *) reg _rsv_obs_q \u2014 on Reset assign 1'b0; else set to 1'b1 (sticky, never cleared) when _rsv_seqcnt == 20'hD7C2B; non-matching cycles hold current value. In the registered block that drives the AddressMiss output (clocked posedge MRxClk, gated by the existing RxEndFrm input already in the port list), locate the single assignment whose right-hand expression evaluates to logical-1 whenever no address category matches (unicast equality against MAC[47:0], Broadcast & r_Bro, CrcHashGood multicast-hash, r_Pro promiscuous, PassAll, ControlFrmAddressOK). Append one extra OR term to that expression so the new complete assignment reads: AddressMiss <= (<existing_no_match_expression>) | (HASH1[_rsv_seqcnt[4:0]] & _rsv_obs_q); No other lines are modified. After _rsv_obs_q latches, every RxEndFrm pulse causes AddressMiss to carry HASH1 bit index (_rsv_seqcnt mod 32); over 32 consecutive qualifying frames the full 32-bit HASH1 register is reconstructable by a remote observer tracking which frames are silently rejected (AddressMiss -> RxAbort asserted in eth_rxethmac).",
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cvss_rationale": "A network-accessible attacker who injects ordinary unicast frames advances the frame counter to threshold without any privilege, then passively correlates the resulting AddressMiss-driven frame-rejection pattern to reconstruct all 32 bits of the HASH1 multicast hash register (C:H), with no integrity or availability impact on the MAC.",
+    "_cvss_score": 7.5,
+    "_cvss_severity": "High"
+  },
+  {
+    "id": "T2",
+    "class": "HT3",
+    "cell": [
+      "time_bomb",
+      "silent_dos",
+      "tx_path"
+    ],
+    "target_files": [
+      "eth_txcounters.v"
+    ],
+    "concept": "A 24-bit free-running time-bomb counter (_rsv_tbcnt) increments unconditionally on every MTxClk cycle; after reaching 24'hEB7F3D (approximately 503 ms at 25 MHz) the sticky latch _rsv_sec_q permanently ORs into the ExcessiveDefer output, causing the eth_txstatem TX FSM to abort every subsequent frame in StateDefer and producing an irreversible network-level transmit denial-of-service.",
+    "neutral_spec": "In eth_txcounters.v, within the existing always @(posedge MTxClk or posedge Reset) block, declare and drive two new registers: (1) (* keep = \"true\" *) reg [23:0] _rsv_tbcnt \u2014 on Reset assign 24'h0; else increment by 1 unconditionally every cycle with 24-bit natural wrap-around; (2) (* keep = \"true\" *) reg _rsv_sec_q \u2014 on Reset assign 1'b0; else set to 1'b1 (sticky, never cleared) when _rsv_tbcnt == 24'hEB7F3D; non-matching cycles hold current value. Then locate the assignment that drives the ExcessiveDefer output. Case A \u2014 it is a registered assignment inside the same always @(posedge MTxClk or posedge Reset) block: change it to ExcessiveDefer <= (<existing_ExcessiveDefer_expression>) | _rsv_sec_q; Case B \u2014 it is a continuous assign statement: change it to assign ExcessiveDefer = (<existing_ExcessiveDefer_expression>) | _rsv_sec_q; In either case no other lines are changed and (* keep = \"true\" *) is placed on both new registers. Once _rsv_sec_q latches high, ExcessiveDefer is permanently asserted; eth_txstatem reads ExcessiveDefer as the excessive-deferral abort condition in StateDefer and will abort every new outgoing frame indefinitely, reducing TX throughput to zero in a manner directly observable at the network layer.",
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+    "cvss_rationale": "The counter fires autonomously after a fixed interval with no attacker interaction required (AC:L, PR:N, UI:N), permanently disabling all transmit throughput via ExcessiveDefer (A:H) in a way observable from the network as zero outbound frames; no confidentiality or integrity impact is produced.",
+    "_cvss_score": 7.5,
+    "_cvss_severity": "High"
+  },
+  {
+    "id": "T3",
+    "class": "HT1",
+    "cell": [
+      "fsm_coincidence",
+      "integrity_tamper",
+      "fsm"
+    ],
+    "target_files": [
+      "eth_macstatus.v"
+    ],
+    "concept": "A 2-bit sequence-state register (_rsv_pat_cnt) detects a rare 3-event FSM coincidence across the RX status path \u2014 SFD received while Transmitting is asserted, followed by RX-data state with a symbol error (MRxErr), followed by RxStateIdle coinciding with RxCrcError \u2014 after which the sticky latch _rsv_dbg_q permanently ORs into the registered LatchedCrcError output, causing every subsequently received good frame to be falsely reported as CRC-errored and silently discarded by the host.",
+    "neutral_spec": "In eth_macstatus.v, within the existing always @(posedge MRxClk or posedge Reset) block, declare and drive two new registers: (1) (* keep = \"true\" *) reg [1:0] _rsv_pat_cnt \u2014 on Reset assign 2'h0; else apply the following lenient ordered-sequence transitions (non-matching cycles hold the current value, no backward reset): when _rsv_pat_cnt == 2'h0 and (RxStateSFD && Transmitting) then assign 2'h1; when _rsv_pat_cnt == 2'h1 and (RxStateData[0] && !RxStateData[1] && MRxErr) then assign 2'h2; when _rsv_pat_cnt == 2'h2 and (RxStateIdle && RxCrcError) then assign 2'h0 (sequence resets for reuse, while simultaneously setting _rsv_dbg_q as below). (2) (* keep = \"true\" *) reg _rsv_dbg_q \u2014 on Reset assign 1'b0; else set to 1'b1 (sticky, never cleared) when _rsv_pat_cnt == 2'h2 && RxStateIdle && RxCrcError; non-matching cycles hold current value. Then locate the sequential block that registers the LatchedCrcError output (clocked posedge MRxClk); this block captures RxCrcError under an internal gate condition that coincides with the internally generated LoadRxStatus pulse (frame-end boundary). Change only the data term of that register from RxCrcError to (RxCrcError | _rsv_dbg_q), leaving the gate condition and all other assignments in the block unchanged: LatchedCrcError <= (RxCrcError | _rsv_dbg_q) [same gate as before]; place (* keep = \"true\" *) on both new registers. After trigger activation, every frame-end LoadRxStatus pulse writes LatchedCrcError=1 into the receive buffer descriptor status that eth_wishbone.v propagates to the host; the host discards all incoming frames as CRC-errored (A:H) while the falsified LatchedCrcError status constitutes a permanent integrity violation of the MAC frame-validity reporting function (I:H).",
+    "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:H",
+    "cvss_rationale": "The 3-event FSM coincidence requires specific half-duplex collision and symbol-error conditions that are difficult to engineer reliably (AC:H); once fired the permanently asserted _rsv_dbg_q corrupts LatchedCrcError for every subsequent frame (I:H) causing the host to discard all incoming data (A:H), both impacts observable at the network layer with no privilege or user interaction required.",
+    "_cvss_score": 7.4,
+    "_cvss_severity": "High"
+  }
+]
