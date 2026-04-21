@@ -78,16 +78,20 @@ To implement this mathematically, we will use a standard CTF dynamic point formu
 
 ## Part 4: Advanced Detection Analytics (Phase 2)
 
-This section moves beyond basic CTF points and evaluates the precision and analytical power of a team's AI-driven detection systems.
+This section moves beyond basic CTF points and evaluates the precision and analytical power of a team's AI-driven detection systems, as well as the design of the systems themselves.
 
 * **False Positive Resilience:** Evaluates how well the detection AI handles completely clean designs without hallucinating vulnerabilities.
 * **Explainability & Localization:** Evaluates whether the AI simply guesses "infected" or actually pinpoints the exact malicious logic.
+* **Creative Use of Generative AI:** Evaluates the sophistication of the AI pipeline (e.g., complex prompt chaining and engineering, RAG, agentic workflows, etc.) versus basic copy-pasting.
+* **System Automation:** Measures the end-to-end automation of the generation, insertion, and testing pipeline.
 * **Documentation of Detection Framework:**  Evaluates the clarity of the team's write-up, full AI logs, and instructions for the design and use of their vulnerability detection framework.
 
 | Evaluation Criteria | 4 - Exemplary | 3 - Proficient | 2 - Developing | 1 - Novice |
 | :--- | :--- | :--- | :--- | :--- |
 | **False Positive Resilience** | AI correctly identifies all clean designs; 0% false positive rate. | Occasional hallucinations; < 10% false positive rate on clean designs. | Frequent hallucinations; 10% to 30% false positive rate. | Overly aggressive AI; > 30% false positive rate (flags almost everything). |
 | **Localization & Explainability** | Pinpoints exact gate-level coordinates, AST nodes, or specific lines of malicious code. | Identifies the general module or hierarchical path containing the Trojan. | Outputs a binary "True/False" for infection with a vague explanation. | Outputs "True/False" with no explanation, or hallucinated reasoning. |
+| **Generative AI Use** | Dynamic, seamless AI generation and insertion using advanced techniques (e.g., AST manipulation). | Effective AI generation of logic, but relies on little more than prompt engineering and basic interactions. | Simple AI generated logic, but required significant manual analysis through repeated prompting. | Minimal AI use; just simple prompting with copy-pasting. |
+| **System Automation** | Fully automated, "one-click" pipeline to analyze a project and identify Trojans. | Highly automated but requires 1-2 manual steps (e.g., moving files). | Fragmented pipeline requiring manual oversight and handoffs between scripts. | No automation; entirely manual detection through AI prompts. |
 | **Documentation** | Exceptional detail on AI prompts, architecture, and perfect reproducibility steps. | Clear and complete explanation of strategy and mechanism; mostly reproducible. | Basic overview lacking pipeline details; reproducibility requires guesswork. | Missing or highly confusing; fails to explain AI usage or Trojan detection methods. |
 
 
